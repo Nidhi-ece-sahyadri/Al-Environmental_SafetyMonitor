@@ -231,105 +231,122 @@ sudo apt update
 sudo apt install python3-pip espeak -y
 ```
 
-Methodology — AI-Enabled Danger Detection (Raspberry Pi)
 
+```bash
+pip3 install firebase-admin pandas joblib requests pillow adafruit-circuitpython-ssd1306
+```
 
-2.1 Data Acquisition from Firebase
+## 🧠 Methodology — AI-Enabled Danger Detection (Raspberry Pi)
+
+---
+
+### 2.1 Data Acquisition from Firebase
 
 The Raspberry Pi continuously polls the Firebase Realtime Database at regular intervals to retrieve the latest sensor readings uploaded by the ESP32 sender node.
 
-Retrieved parameters:
+**Retrieved parameters:**
 
-ParameterSensorTemperature (°C)DHT11Humidity (%)DHT11Gas Level (analog value)MQ2 SensorFlame Status (0 / 1)Flame Sensor
+| Parameter | Sensor |
+|---|---|
+| Temperature (°C) | DHT11 |
+| Humidity (%) | DHT11 |
+| Gas Level (analog value) | MQ2 Sensor |
+| Flame Status (0 / 1) | Flame Sensor |
 
-A Python script handles the Firebase connection using the firebase-admin SDK, authenticating via a service account credentials file.
+A Python script handles the Firebase connection using the `firebase-admin` SDK, authenticating via a service account credentials file.
 
+---
 
-2.2 Data Preprocessing and Noise Reduction
+### 2.2 Data Preprocessing and Noise Reduction
 
-Raw sensor data from industrial environments often contains noise and transient spikes. A sliding window averaging technique is applied to address this:
+Raw sensor data from industrial environments often contains noise and transient spikes. A **sliding window averaging technique** is applied to address this:
 
-
-The system maintains a rolling buffer of the last 5 readings for each parameter.
-The mean value of each buffer is computed.
-These averaged values are passed as input to the ML model.
-
+1. The system maintains a rolling buffer of the **last 5 readings** for each parameter.
+2. The **mean value** of each buffer is computed.
+3. These averaged values are passed as input to the ML model.
 
 This smoothens momentary false spikes (e.g., a brief gas sensor fluctuation) and ensures decisions are based on stable, representative data.
 
+---
 
-2.3 Machine Learning Model — Random Forest Classifier
+### 2.3 Machine Learning Model — Random Forest Classifier
 
-Model Selection
+#### Model Selection
 
 A Random Forest Classifier was chosen for the following reasons:
 
+- Handles non-linear relationships between sensor parameters
+- Robust to outliers and noise
+- Provides high accuracy with a small training dataset
+- Fast inference time, suitable for real-time edge deployment
 
-Handles non-linear relationships between sensor parameters
-Robust to outliers and noise
-Provides high accuracy with a small training dataset
-Fast inference time, suitable for real-time edge deployment
-
-
-Training
+#### Training
 
 The model was trained on a labelled dataset with the following structure:
 
-FeatureDescriptionTemperatureAmbient temperature reading (°C)HumidityRelative humidity (%)Gas LevelAnalog sensor output (0–4095)Flame StatusBinary (0 = No flame, 1 = Flame detected)LabelSAFE (0) or DANGER (1)
+| Feature | Description |
+|---|---|
+| Temperature | Ambient temperature reading (°C) |
+| Humidity | Relative humidity (%) |
+| Gas Level | Analog sensor output (0–4095) |
+| Flame Status | Binary (0 = No flame, 1 = Flame detected) |
+| **Label** | **SAFE (0) or DANGER (1)** |
 
-Training data was collected by simulating both safe and hazardous conditions and manually labelling each reading. The trained model was serialized using pickle (.pkl file) and loaded at runtime on the Raspberry Pi.
+Training data was collected by simulating both safe and hazardous conditions and manually labelling each reading. The trained model was serialized using `pickle` (`.pkl` file) and loaded at runtime on the Raspberry Pi.
 
-Prediction
+#### Prediction
 
 At each inference cycle:
 
+1. Averaged sensor values are formatted as a feature vector.
+2. The feature vector is passed to the loaded Random Forest model.
+3. The model outputs a binary classification: `SAFE` or `DANGER`.
 
-Averaged sensor values are formatted as a feature vector.
-The feature vector is passed to the loaded Random Forest model.
-The model outputs a binary classification: SAFE or DANGER.
+---
 
-
-
-2.4 Decision Engine and Alert Triggering
+### 2.4 Decision Engine and Alert Triggering
 
 Based on the model's output, the decision engine determines the appropriate response:
 
-PredictionActionSAFEUpdate OLED with current values; no alert triggeredDANGERTrigger voice alert + OLED warning + SMS notification
+| Prediction | Action |
+|---|---|
+| `SAFE` | Update OLED with current values; no alert triggered |
+| `DANGER` | Trigger voice alert + OLED warning + SMS notification |
 
+> A **cooldown timer** is implemented to prevent repeated alerts within a short window, avoiding alert fatigue for workers.
 
-A cooldown timer is implemented to prevent repeated alerts within a short window, avoiding alert fatigue for workers.
+---
 
+### 2.5 Alert Subsystems
 
+#### 🔊 Voice Alert (eSpeak TTS)
 
+The `eSpeak` engine is invoked via a Python subprocess call. The spoken message is dynamically generated based on which parameter crossed the threshold.
 
-2.5 Alert Subsystems
-
-🔊 Voice Alert (eSpeak TTS)
-
-The eSpeak engine is invoked via a Python subprocess call. The spoken message is dynamically generated based on which parameter crossed the threshold.
-
+```
 "Warning! High gas level detected."
 "Warning! Flame detected. Evacuate immediately."
+```
 
-🖥️ OLED Display (SSD1306)
+#### 🖥️ OLED Display (SSD1306)
 
-Driven using the Adafruit_SSD1306 Python library over I2C. Displays:
+Driven using the `Adafruit_SSD1306` Python library over I2C. Displays:
 
+- Live temperature, humidity, gas level, and flame status
+- Current system state (`SAFE` / `DANGER`) in large text
 
-Live temperature, humidity, gas level, and flame status
-Current system state (SAFE / DANGER) in large text
-
-
-📱 SMS Notification (CircuitDigest Cloud API)
+#### 📱 SMS Notification (CircuitDigest Cloud API)
 
 An HTTP POST request is sent to the CircuitDigest API endpoint with the alert message and recipient number. If internet is unavailable, the alert is queued and retried.
 
+---
 
-2.6 Local Data Logging (Offline Reliability)
+### 2.6 Local Data Logging (Offline Reliability)
 
 Every reading — along with the model prediction and timestamp — is appended to a local JSON log file on the Raspberry Pi.
 
-json{
+```json
+{
   "timestamp": "2025-06-10T14:32:05",
   "temperature": 38.2,
   "humidity": 65.4,
@@ -337,12 +354,15 @@ json{
   "flame": 0,
   "prediction": "DANGER"
 }
+```
 
 This log serves as an audit trail and enables post-incident analysis even when cloud connectivity was unavailable.
 
+---
 
-2.7 System Loop
+### 2.7 System Loop
 
+```
 START
   |
   ├─ Poll Firebase for latest sensor reading
@@ -359,7 +379,4 @@ START
                → Log to JSON
                → Cooldown timer
                → Wait (interval)
-## Install required Python libraries
-```bash
-pip3 install firebase-admin pandas joblib requests pillow adafruit-circuitpython-ssd1306
 ```
