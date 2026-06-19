@@ -221,7 +221,7 @@ void loop() {
   delay(2000);
 }
 ```
----
+
 ## 📦 Dependencies (Install These on Raspberry Pi)
 
 Run the following commands on your Raspberry Pi terminal:
