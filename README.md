@@ -231,7 +231,7 @@ sudo apt update
 sudo apt install python3-pip espeak -y
 ```
 
- Methodology — AI-Enabled Danger Detection (Raspberry Pi)
+Methodology — AI-Enabled Danger Detection (Raspberry Pi)
 
 
 2.1 Data Acquisition from Firebase
